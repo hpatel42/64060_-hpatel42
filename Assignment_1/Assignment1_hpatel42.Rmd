@@ -1,0 +1,76 @@
+---
+title: "Assignment 1"
+author: "Hetu Patel"
+date: '2026-09-10'
+output:
+  html_document: default
+  pdf_document: default
+---
+# 1. Dataset from the web 
+# Dataset: Predict Students' Dropout and Academic Success 
+# Source: Kaggle 
+# URL: https://www.kaggle.com/datasets/naveenkumar20bps1137/predict-students-dropout-and-academic-success 
+# The dataset contains information about students, including demographic information, academic performance, and enrollment information. It contains both quantitative and categorical variables.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# 2. Import the dataset in R
+student_data <- read.csv("~/Desktop/Fall 2026/Fundamentals of machine Learning/Assignment 1/Predict students dropout, academic success.csv")
+```
+
+```{r}
+# 3. Descriptive Statistics 
+summary(student_data)
+
+# Quantitative Variables
+
+# Summary, mean and standard deviation of students age at enrollment
+summary(student_data$Age.at.enrollment)
+mean(student_data$Age.at.enrollment)
+sd(student_data$Age.at.enrollment)
+
+# Summary, minimum and maximum of unemployment rate
+summary(student_data$Unemployment.rate)
+min(student_data$Unemployment.rate)
+max(student_data$Unemployment.rate)
+
+# Categorical Variables
+
+table(student_data$Gender)
+table(student_data$Target)
+table(student_data$Marital.status)
+```
+
+```{r}
+# 4. Transform atleast 1 variable
+# Transform first semester grade into a percentage.The original grade is measured on a 0-20 scale
+student_data$Curricular.units.1st.sem.grade.percent <- (student_data$Curricular.units.1st.sem..grade. / 20) * 100
+
+summary(student_data$Curricular.units.1st.sem.grade.percent)
+
+```
+
+```{r}
+# 5. Plot at least one quantitative variable
+# Histogram showing age of students at the enrollment
+hist(student_data$Age.at.enrollment, 
+     main = "Distribution of Age at Enrollment", 
+     xlab = "Age at Enrollment", 
+     ylab = "Number of Students")
+```
+
+```{r}
+# 5. Plot at least one scatterplot
+# The scatterplot shows the relationship between the number of first semester evaluations and students first semester grades. 
+plot(student_data$Curricular.units.1st.sem..evaluations.,
+     student_data$Curricular.units.1st.sem..grade.,
+     main = "First Semester Evaluations vs. First Semester Grade",
+     xlab = "First Semester Evaluations",
+     ylab = "First Semester Grade")
+```
+
+
+
