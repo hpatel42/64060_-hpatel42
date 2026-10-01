@@ -1,0 +1,371 @@
+---
+title: "Assignment 2 - Universal Bank kNN Analysis"
+author: "Hetu Patel"
+date: '2026-10-01'
+output: html_document
+---
+# Universal Bank k-NN Classification
+# Business Problem - Universal Bank wants to increase the number of customers who accept personal loans. The purpose of this analysis is to use customer demographic and banking information to predict whether a customer will accept a personal loan offer.
+# Solution - The classification method used in this assignment is k-Nearest Neighbors (k-NN). The Personal Loan variable is the target variable, where 1 indicates that the customer accepted the loan and 0 indicates that the customer did not accept the loan.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Installing required packages and calling them with library
+# install.packages("dplyr")
+# install.packages("class")
+# install.packages("caret")
+library(dplyr)
+library(class)
+library(caret)
+```
+
+```{r}
+# loading the database and checking summary and data types present in it
+bank_data <- read.csv("~/Desktop/Fall 2026/Fundamentals of machine Learning/Assignment 2/UniversalBank.csv")
+summary(bank_data)
+str(bank_data)
+head(bank_data)
+```
+```{r}
+# DATA PREPARATION
+# Remove the ID and Zip Code columns from databse
+updated_data <- bank_data[
+  !names(bank_data) %in% c("ID", "ZIP.Code")
+]
+
+# converting education into factor and Creating dummy variables for education
+updated_data$Education <- factor(updated_data$Education)
+education_dummies <- dummyVars(
+  ~ Education,
+  data = updated_data,
+  fullRank = FALSE
+)
+
+education_data <- predict(
+  education_dummies,
+  newdata = updated_data
+)
+
+education_data <- as.data.frame(education_data)
+
+names(education_data) <- c(
+  "Education_1",
+  "Education_2",
+  "Education_3"
+)
+
+# remove Education from updated_data and add the three dummy variales for education which was created
+updated_data <- updated_data[
+  !names(updated_data) %in% c("Education")
+]
+updated_data <- cbind(
+  updated_data,
+  education_data
+)
+names(updated_data)
+head(updated_data)
+```
+
+```{r}
+# Partitioning the data into training (60%) and validation (40%) sets.
+set.seed(123)
+
+train_index <- createDataPartition(
+  updated_data$Personal.Loan,
+  p = 0.60,
+  list = FALSE
+)
+
+train_data <- updated_data[train_index, ]
+validation_data <- updated_data[-train_index, ]
+# Now the number of records for training and validation is as follows
+# Training Set
+nrow(train_data)
+# Validation Set
+nrow(validation_data)
+```
+```{r}
+# Seperate predictors and target and scale the predictors
+x_train <- train_data[
+  !names(train_data) %in% "Personal.Loan"
+]
+
+y_train <- train_data$Personal.Loan
+
+x_validation <- validation_data[
+  !names(validation_data) %in% "Personal.Loan"
+]
+
+y_validation <- validation_data$Personal.Loan
+
+preprocess <- preProcess(
+  x_train,
+  method = c("center", "scale")
+)
+
+x_train_scaled <- predict(
+  preprocess,
+  x_train
+)
+
+x_validation_scaled <- predict(
+  preprocess,
+  x_validation
+)
+```
+
+```{r}
+# Question 1 Classification using k=1. The customer is classified as [1 / 0]. 
+# 1 = customer is predicted to accept the personal loan. 
+# 0 = customer is predicted not to accept the personal loan.
+new_customer <- data.frame(
+  Age = 40,
+  Experience = 10,
+  Income = 84,
+  Family = 2,
+  CCAvg = 2,
+  Mortgage = 0,
+  Securities.Account = 0,
+  CD.Account = 0,
+  Online = 1,
+  CreditCard = 1,
+  Education_1 = 0,
+  Education_2 = 1,
+  Education_3 = 0
+)
+
+# Put variables in same order as training data
+new_customer <- new_customer[
+  , names(x_train)
+]
+
+# Scale new customer
+new_customer_scaled <- predict(
+  preprocess,
+  new_customer
+)
+
+# k = 1
+customer_k1 <- knn(
+  train = x_train_scaled,
+  test = new_customer_scaled,
+  cl = y_train,
+  k = 1
+)
+
+customer_k1
+# Here customer was classified as 0 that is the customer is predicted not to accept the loan
+```
+
+```{r}
+# QUESTION 2 - Finding Best k
+
+k_values <- c(
+  1, 3, 5, 7, 9,
+  11, 13, 15, 17,
+  19, 21
+)
+
+accuracy <- numeric(
+  length(k_values)
+)
+
+for (i in seq_along(k_values)) {
+  
+  prediction <- knn(
+    train = x_train_scaled,
+    test = x_validation_scaled,
+    cl = y_train,
+    k = k_values[i]
+  )
+  
+  accuracy[i] <- mean(
+    prediction == y_validation
+  )
+}
+
+k_results <- data.frame(
+  k = k_values,
+  Accuracy = accuracy
+)
+
+k_results
+
+# Select best k
+best_k <- k_results$k[
+  which.max(k_results$Accuracy)
+]
+# The best k is [best_k], as it provides the best validation performance while balancing overfitting and underfitting. The results says the besk k is 1.
+best_k
+
+# Plot
+plot(
+  k_results$k,
+  k_results$Accuracy,
+  type = "b",
+  xlab = "k",
+  ylab = "Validation Accuracy",
+  main = "Validation Accuracy for Different Values of k"
+)
+
+```
+
+```{r}
+# QUESTION 3 - The confusion matrix for the validation data using the best k.
+# Make target variables factors with the same levels
+y_train <- factor(as.character(y_train), levels = c("0", "1"))
+y_validation <- factor(as.character(y_validation), levels = c("0", "1"))
+
+# k-NN prediction
+best_prediction <- knn(
+  train = x_train_scaled,
+  test = x_validation_scaled,
+  cl = y_train,
+  k = best_k
+)
+
+# Make prediction a factor with the same levels
+best_prediction <- factor(
+  as.character(best_prediction),
+  levels = c("0", "1")
+)
+
+# Confusion matrix
+confusionMatrix(
+  best_prediction,
+  y_validation,
+  positive = "1"
+)
+```
+
+```{r}
+# QUESTION 4 - # Q4: Using the best k, the customer is classified as [1/0] for personal loan acceptance.
+customer_best_k <- knn(
+  train = x_train_scaled,
+  test = new_customer_scaled,
+  cl = y_train,
+  k = best_k
+)
+
+customer_best_k
+
+```
+
+```{r}
+# QUESTION 5 - Repartitioning  the data, this time into training, validation, and test sets (50% : 30% : 20%).
+# Factor the personal loan
+updated_data$Personal.Loan <- factor(
+  updated_data$Personal.Loan,
+  levels = c(0, 1)
+)
+set.seed(123)
+
+# 50% Training
+train_index2 <- createDataPartition(
+  updated_data$Personal.Loan,
+  p = 0.50,
+  list = FALSE
+)
+train_data2 <- updated_data[train_index2, ]
+remaining_data <- updated_data[-train_index2, ]
+
+# 30% Validation and 20% Test
+validation_index2 <- createDataPartition(
+  remaining_data$Personal.Loan,
+  p = 0.60,
+  list = FALSE
+)
+validation_data2 <- remaining_data[
+  validation_index2,
+]
+test_data2 <- remaining_data[
+  -validation_index2,
+]
+
+# Check sizes
+nrow(train_data2)
+nrow(validation_data2)
+nrow(test_data2)
+
+# Separate predictors and target
+x_train2 <- train_data2[
+  !names(train_data2) %in% "Personal.Loan"
+]
+y_train2 <- train_data2$Personal.Loan
+x_validation2 <- validation_data2[
+  !names(validation_data2) %in% "Personal.Loan"
+]
+y_validation2 <- validation_data2$Personal.Loan
+x_test2 <- test_data2[
+  !names(test_data2) %in% "Personal.Loan"
+]
+y_test2 <- test_data2$Personal.Loan
+
+# Scale using training data
+preprocess2 <- preProcess(
+  x_train2,
+  method = c("center", "scale")
+)
+
+x_train2_scaled <- predict(
+  preprocess2,
+  x_train2
+)
+
+x_validation2_scaled <- predict(
+  preprocess2,
+  x_validation2
+)
+
+x_test2_scaled <- predict(
+  preprocess2,
+  x_test2
+)
+
+# Training Confusion Matrix
+train_prediction2 <- knn(
+  train = x_train2_scaled,
+  test = x_train2_scaled,
+  cl = y_train2,
+  k = best_k
+)
+
+confusionMatrix(
+  train_prediction2,
+  y_train2,
+  positive = "1"
+)
+
+# Validation Confusion Matrix
+validation_prediction2 <- knn(
+  train = x_train2_scaled,
+  test = x_validation2_scaled,
+  cl = y_train2,
+  k = best_k
+)
+
+confusionMatrix(
+  validation_prediction2,
+  y_validation2,
+  positive = "1"
+)
+
+# Test Confusion Matrix
+test_prediction2 <- knn(
+  train = x_train2_scaled,
+  test = x_test2_scaled,
+  cl = y_train2,
+  k = best_k
+)
+
+confusionMatrix(
+  test_prediction2,
+  y_test2,
+  positive = "1"
+)
+# The training, validation, and test results may differ because the training data is used to build the model, while validation and test data contain unseen observations.
+```
+ 
