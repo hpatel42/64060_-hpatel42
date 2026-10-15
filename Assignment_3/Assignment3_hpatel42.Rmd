@@ -1,0 +1,235 @@
+---
+title: "Assignment 3 - Naive Bayes"
+author: "Hetu Patel"
+date: '2026-10-15'
+output: html_document
+---
+# Introduction : The purpose of this assignment is to use Naive Bayes classification to predict whether a customer will accept a personal loan offer. The analysis uses Online banking and Credit Card ownership as predictors.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Import dataset
+data <- read.csv("~/Desktop/Fall 2026/Fundamentals of machine Learning/Assignment 3/UniversalBank.csv")
+head(data)
+# Calling packages needed for naive bayes
+library(e1071)
+```
+
+```{r}
+# Data Preparation
+# Keeping the three variables required
+data <- data[, c("Online", "CreditCard", "Personal.Loan")]
+# Rename the columns for easier coding
+names(data) <- c("Online", "CC", "Loan")
+
+# Remove missing observations
+data <- na.omit(data)
+
+# Convert variables to categorical factors
+data$Online <- factor(data$Online, levels = c(0, 1))
+data$CC <- factor(data$CC, levels = c(0, 1))
+data$Loan <- factor(data$Loan, levels = c(0, 1))
+
+# Split into 60% training and 40% validation, while maintaining the Loan class proportions
+set.seed(123)
+
+train_index <- unlist(
+  lapply(split(seq_len(nrow(data)), data$Loan), function(i) {
+    sample(i, floor(0.60 * length(i)))
+  }),
+  use.names = FALSE
+)
+
+train_data <- data[train_index, ]
+validation_data <- data[-train_index, ]
+
+nrow(train_data)
+nrow(validation_data)
+#checking loan acceptance in training data
+table(train_data$Loan)
+```
+```{r}
+# Question A: Create a Pivot Table
+
+pivot_A <- with(
+  train_data,
+  table(CC, Loan, Online)
+)
+
+# Display Online as columns and CC, Loan as rows
+ftable(pivot_A, row.vars = c("CC", "Loan"))
+# The pivot table summarizes the number of customers based on their Credit Card (CC), Personal Loan (Loan), and Online banking status. It helps us compare loan acceptance across different customer groups.
+```
+
+```{r}
+# Question B: Probability of Loan Acceptance
+
+count_accepted <- with(
+  train_data,
+  sum(CC == "1" & Online == "1" & Loan == "1")
+)
+
+count_eligible <- with(
+  train_data,
+  sum(CC == "1" & Online == "1")
+)
+
+prob_B <- count_accepted / count_eligible
+
+count_accepted
+count_eligible
+prob_B
+# This code calculates the probability that a customer accepted a personal loan given that they have a credit card and use online banking. The result is the proportion of customers in this group who accepted the loan.
+```
+
+```{r}
+# Question C: Two Pivot Tables
+
+# Loan as a function of Online
+table_Loan_Online <- with(
+  train_data,
+  table(Loan, Online)
+)
+
+table_Loan_Online
+
+# Loan as a function of Credit Card
+table_Loan_CC <- with(
+  train_data,
+  table(Loan, CC)
+)
+
+table_Loan_CC
+# The frequency tables show the distribution of loan acceptance based on online banking and credit card status. These counts help identify patterns between customer characteristics and personal loan acceptance.
+```
+
+```{r}
+# Question D: Computing Required Probabilities
+
+# i. P(CC = 1 | Loan = 1)
+p_CC_given_Loan1 <- mean(
+  train_data$CC[train_data$Loan == "1"] == "1"
+)
+
+# ii. P(Online = 1 | Loan = 1)
+p_Online_given_Loan1 <- mean(
+  train_data$Online[train_data$Loan == "1"] == "1"
+)
+
+# iii. P(Loan = 1)
+p_Loan1 <- mean(train_data$Loan == "1")
+
+# iv. P(CC = 1 | Loan = 0)
+p_CC_given_Loan0 <- mean(
+  train_data$CC[train_data$Loan == "0"] == "1"
+)
+
+# v. P(Online = 1 | Loan = 0)
+p_Online_given_Loan0 <- mean(
+  train_data$Online[train_data$Loan == "0"] == "1"
+)
+
+# vi. P(Loan = 0)
+p_Loan0 <- mean(train_data$Loan == "0")
+
+# Displaying all six probabilities in the form of table
+probabilities <- data.frame(
+  Quantity = c(
+    "P(CC = 1 | Loan = 1)",
+    "P(Online = 1 | Loan = 1)",
+    "P(Loan = 1)",
+    "P(CC = 1 | Loan = 0)",
+    "P(Online = 1 | Loan = 0)",
+    "P(Loan = 0)"
+  ),
+  Probability = c(
+    p_CC_given_Loan1,
+    p_Online_given_Loan1,
+    p_Loan1,
+    p_CC_given_Loan0,
+    p_Online_given_Loan0,
+    p_Loan0
+  )
+)
+
+probabilities
+# This code calculates the prior probability of loan acceptance and the conditional probabilities of having a credit card and using online banking for both loan acceptors and non-acceptors. These probabilities are used in the Naive Bayes calculation.
+```
+
+```{r}
+# Question E: using above calculations to compute naive bayes probability
+
+numerator_1 <- p_CC_given_Loan1 *
+  p_Online_given_Loan1 *
+  p_Loan1
+
+numerator_0 <- p_CC_given_Loan0 *
+  p_Online_given_Loan0 *
+  p_Loan0
+
+prob_E <- numerator_1 / (numerator_1 + numerator_0)
+
+prob_E
+# This code uses the probabilities calculated in Question D to estimate the probability that a customer will accept a personal loan, given that they have a credit card and use online banking. The estimated probability is 0.1000861.
+```
+
+```{r}
+# Question F: Comparing and reprenting in table
+
+comparison <- data.frame(
+  Method = c("Pivot table", "Naive Bayes"),
+  Probability = c(prob_B, prob_E)
+)
+
+comparison
+# The probability calculated using the pivot table in Question B is compared with the Naive Bayes estimate from Question E. Any difference may occur because Naive Bayes assumes that the predictors are conditionally independent given the loan outcome.
+```
+
+```{r}
+# Question G: Naive Bayes Model
+
+# Train the Naive Bayes model
+nb_model <- naiveBayes(
+  Loan ~ CC + Online,
+  data = train_data
+)
+
+# Display the model and learned probabilities
+nb_model
+
+# Predict posterior probabilities on training data
+train_predictions <- predict(
+  nb_model,
+  newdata = train_data,
+  type = "raw"
+)
+
+# Select customers with CC = 1 and Online = 1
+target_rows <- train_data$CC == "1" &
+  train_data$Online == "1"
+
+# Display the posterior probabilities for these customers
+head(
+  data.frame(
+    CC = train_data$CC[target_rows],
+    Online = train_data$Online[target_rows],
+    train_predictions[target_rows, , drop = FALSE]
+  )
+)
+
+# Extract the probability of Loan = 1
+prob_G <- unique(train_predictions[target_rows, "1"])
+
+prob_G
+
+# Compare the manual and model-based calculations
+data.frame(
+  Method = c("Manual Naive Bayes", "Naive Bayes model"),
+  Probability = c(prob_E, prob_G[1])
+)
+# This code builds a Naive Bayes model using the training data and predicts loan acceptance probabilities for customers with a credit card and online banking. The model’s estimated probability is 0.1000861, which can be compared with the manual calculation in Question E. And when comparing we see that the probabilities are same. 
+```
+
