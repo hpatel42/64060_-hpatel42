@@ -1,0 +1,282 @@
+---
+title: "Assignment 4 - k-Means for Clustering"
+author: "Hetu Patel"
+date: '2026-10-29'
+output: html_document
+---
+
+## Introduction: The purpose of this assignment is to use k-Means clustering to explore the financial characteristics of 21 firms in the pharmaceutical industry. The analysis uses nine numerical variables, including market capitalization, beta, price/earnings ratio, return on equity, return on assets, asset turnover, leverage, estimated revenue growth, and net profit margin. The variables will be standardized before clustering to ensure that differences in their measurement scales do not disproportionately influence the results. The assignment also examines broker recommendations, headquarters locations, and stock exchanges to identify possible patterns across the clusters. Finally, each cluster will be interpreted and given a meaningful name based on its financial characteristics.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data <- read.csv("~/Desktop/Fall 2026/Fundamentals of machine Learning/Assignment 4/Pharmaceuticals.csv")
+dim(data)
+names(data)
+str(data)
+summary(data)
+```
+```{r}
+# All the necessary packages to be called
+library(ggplot2)
+library(dplyr)
+library(cluster)
+library(knitr)
+```
+
+```{r}
+# Question a: Cluster the firms using numerical variables
+num_cols <- c(
+  "Market_Cap",
+  "Beta",
+  "PE_Ratio",
+  "ROE",
+  "ROA",
+  "Asset_Turnover",
+  "Leverage",
+  "Rev_Growth",
+  "Net_Profit_Margin"
+)
+
+data_num <- data[, num_cols]
+
+# Check for missing values
+colSums(is.na(data_num))
+
+# Display the selected data
+head(data_num)
+```
+```{r}
+# Standardize the variables and scaling the data
+data_scaled <- scale(data_num)
+
+# Check the standardized variables
+round(head(data_scaled), 2)
+
+# Confirm the standardized means
+round(colMeans(data_scaled), 3)
+# I used the nine numerical variables specified in the assignment to cluster the 21 pharmaceutical firms. I standardized the variables using the scale() function because the variables have different units and ranges. For example, market capitalization is measured in billions of dollars, while beta and financial ratios use different scales. Standardization prevents variables with larger numerical values from dominating the distance calculations. I selected k-Means because it groups firms according to their similarity across numerical characteristics.
+```
+
+```{r}
+set.seed(123)
+
+k_values <- 2:8
+
+wss <- sapply(k_values, function(k) {
+  kmeans(
+    data_scaled,
+    centers = k,
+    nstart = 50
+  )$tot.withinss
+})
+
+plot(
+  k_values, wss,
+  type = "b",
+  xlab = "Number of Clusters (k)",
+  ylab = "Within-Cluster Sum of Squares",
+  main = "Elbow Method"
+)
+```
+
+```{r}
+# Elobow Method
+set.seed(123)
+
+k_values <- 2:8
+
+wss <- sapply(k_values, function(k) {
+  kmeans(
+    data_scaled,
+    centers = k,
+    nstart = 50
+  )$tot.withinss
+})
+
+plot(
+  k_values, wss,
+  type = "b",
+  xlab = "Number of Clusters (k)",
+  ylab = "Within-Cluster Sum of Squares",
+  main = "Elbow Method"
+)
+```
+
+```{r}
+# Silhouette comparison
+sil_scores <- sapply(k_values, function(k) {
+  set.seed(123)
+
+  model <- kmeans(
+    data_scaled,
+    centers = k,
+    nstart = 50
+  )
+
+  mean(
+    silhouette(
+      model$cluster,
+      dist(data_scaled)
+    )[, 3]
+  )
+})
+
+data.frame(
+  k = k_values,
+  WSS = round(wss, 2),
+  Silhouette = round(sil_scores, 3)
+)
+```
+
+```{r}
+plot(
+  k_values, sil_scores,
+  type = "b",
+  xlab = "Number of Clusters (k)",
+  ylab = "Average Silhouette Width",
+  main = "Silhouette Analysis"
+)
+# I compared different numbers of clusters using the elbow method and average silhouette width. The elbow method measures how much within-cluster variation decreases as more clusters are added. The silhouette score measures how well each firm fits its assigned cluster compared with other clusters. Based on the preliminary analysis, a three-cluster solution is a reasonable choice because it provides a balance between cluster separation and interpretability. The final choice should also be checked against the plots and silhouette results produced in R. I used nstart = 50 to try multiple initial cluster assignments and reduce the risk of obtaining a poor solution.
+```
+
+```{r}
+# Running final k-Means Model
+set.seed(123)
+
+km3 <- kmeans(
+  data_scaled,
+  centers = 3,
+  nstart = 50
+)
+
+# Cluster sizes
+km3$size
+
+# Cluster centers
+round(km3$centers, 2)
+
+# Add cluster assignments to the original data
+data$Cluster <- factor(km3$cluster)
+
+# View each firm's cluster
+data[, c("Symbol", "Name", "Cluster")]
+```
+
+```{r}
+# Question b: Interpret the clusters
+# Calculate cluster Averages
+cluster_means <- data %>%
+  group_by(Cluster) %>%
+  summarise(
+    n = n(),
+    across(
+      all_of(num_cols),
+      ~ mean(.x, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+kable(
+  cluster_means,
+  digits = 2,
+  caption = "Average Financial Characteristics by Cluster"
+)
+```
+
+```{r}
+# Visualize the Clusters
+ggplot(
+  data,
+  aes(
+    x = Market_Cap,
+    y = Net_Profit_Margin,
+    color = Cluster,
+    label = Symbol
+  )
+) +
+  geom_point(size = 3) +
+  geom_text(
+    nudge_y = 0.5,
+    check_overlap = TRUE,
+    show.legend = FALSE
+  ) +
+  labs(
+    title = "Pharmaceutical Firms by Cluster",
+    x = "Market Capitalization (Billions of Dollars)",
+    y = "Net Profit Margin"
+  ) +
+  theme_minimal()
+# The three clusters represent firms with different combinations of financial characteristics. The cluster averages help identify these differences. One group consists of smaller firms with relatively high estimated revenue growth and higher leverage. Another group consists of large firms with stronger average returns on equity and assets, higher net profit margins, and lower beta. The remaining group has higher average price/earnings ratios but lower average profitability and revenue growth. These differences suggest that the pharmaceutical firms can be separated into groups based on their size, growth potential, profitability, valuation, and financial risk.
+```
+
+```{r}
+# Question c: Examine the other three variables
+# Compare brocker recommendation 
+recommendation_table <- table(
+  data$Cluster,
+  data$Median_Recommendation
+)
+
+recommendation_table
+
+# Proportions within each cluster
+round(
+  prop.table(recommendation_table, margin = 1),
+  2
+)
+```
+
+```{r}
+# Compare headquarters locations 
+location_table <- table(
+  data$Cluster,
+  data$Location
+)
+
+location_table
+
+round(
+  prop.table(location_table, margin = 1),
+  2
+)
+```
+
+```{r}
+# Compare stock exchanges
+exchange_table <- table(
+  data$Cluster,
+  data$Exchange
+)
+
+exchange_table
+
+round(
+  prop.table(exchange_table, margin = 1),
+  2
+)
+# The additional variables show some patterns across the clusters, but they do not completely distinguish the groups. In the preliminary three-cluster solution, one cluster contains only firms listed on the NYSE and is dominated by US-headquartered firms. Another cluster is also mostly US-headquartered but includes firms listed on different exchanges. The third cluster contains only NYSE-listed firms, but its companies have headquarters in several countries. Broker recommendations also vary across the clusters. One group has more Moderate Buy recommendations, another has more Hold recommendations, and the remaining group includes Hold, Moderate Buy, and Strong Buy recommendations. Overall, the results suggest some association between financial clusters and the additional variables. However, the patterns overlap, and the small sample of 21 firms limits the conclusions that can be drawn.
+```
+
+```{r}
+# Question d: Give each cluster an appropriate name
+data %>%
+  select(
+    Symbol,
+    Name,
+    Cluster,
+    all_of(num_cols),
+    Median_Recommendation,
+    Location,
+    Exchange
+  ) %>%
+  arrange(Cluster) %>%
+  kable(
+    digits = 2,
+    caption = "Company Assignments and Financial Characteristics"
+  )
+```
+
+## The k-Means clustering analysis helped identify three groups among the 21 pharmaceutical firms using nine numerical financial variables. Standardizing the variables ensured that differences in measurement scales did not unfairly influence the clustering process. The clusters showed differences in market capitalization, profitability, revenue growth, valuation, and leverage. The analysis also showed that broker recommendations, headquarters locations, and stock exchanges provide additional context for understanding the groups. However, these variables did not completely separate the clusters. Overall, k-Means was useful for exploring the financial structure of the pharmaceutical industry and identifying firms with similar financial characteristics.
